@@ -13,10 +13,10 @@ export async function analyzeWithAI(input) {
             return cache.get(input);
         }
         const prompt = `
-You are a senior software security engineer.
+You are a senior software security engineer and tester with high experience of at least 10 years.
+Make sure to provide detailed and actionable insights for each issue, including potential impacts, security risks, and recommended fixes or alternatives.
 
 Analyze the following dependency issues:
-
 ${input}
 
 Respond in this format:

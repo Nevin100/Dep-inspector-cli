@@ -1,14 +1,24 @@
 {
   "name": "dep-inspector",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "AI powered dependency inspector for JavaScript/TypeScript projects",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "keywords": [
+    "dependency",
+    "inspector",
+    "analyzer",
+    "security",
+    "vulnerability",
+    "ai",
+    "groq",
+    "langchain"
+  ],
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Nevin Bali",
+  "license": "MIT",
   "type": "module",
   "dependencies": {
     "@langchain/groq": "^1.2.0",
