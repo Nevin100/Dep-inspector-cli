@@ -1,0 +1,52 @@
+import { ChatGroq } from "@langchain/groq";
+import { config } from "dotenv";
+
+config();
+
+const model = new ChatGroq({
+  model: "llama-3.1-8b-instant",
+  temperature: 0.3,
+});
+
+// In-memory cache
+const cache = new Map<string, string>();
+
+export async function analyzeWithAI(input: string): Promise<string> {
+  try {
+    if (cache.has(input)) {
+      return cache.get(input)!;
+    }
+
+    const prompt = `
+You are a senior software security engineer and tester with high experience of at least 10 years.
+Make sure to provide detailed and actionable insights for each issue, including potential impacts, security risks, and recommended fixes or alternatives.
+
+Analyze the following dependency issues:
+${input}
+
+Respond in this format:
+
+1. Issue
+2. Impact
+3. Security Risk
+4. Fix
+5. Alternative
+`;
+
+    const res = await model.invoke(prompt);
+
+    let finalOutput = "";
+
+    if (typeof res.content === "string") {
+      finalOutput = res.content.trim();
+    } else {
+      finalOutput = JSON.stringify(res.content, null, 2);
+    }
+
+    cache.set(input, finalOutput);
+
+    return finalOutput;
+  } catch {
+    return "⚠️ AI analysis failed.";
+  }
+}
