@@ -1,16 +1,35 @@
 import chalk from "chalk";
 import { getLatestVersion } from "./version.js";
-export async function printTree(node, prefix = "", isLast = true, pkgName = "root", vulnerabilities = {}, chain = []) {
+const latestVersionMap = new Map();
+export function prefetchVersions(pkgNames) {
+    const unique = [...new Set(pkgNames)];
+    for (const pkg of unique) {
+        if (!latestVersionMap.has(pkg)) {
+            latestVersionMap.set(pkg, getLatestVersion(pkg));
+        }
+    }
+}
+export function collectAllPackageNames(node, names = new Set()) {
+    const deps = node.dependencies || {};
+    for (const dep of Object.keys(deps)) {
+        names.add(dep);
+        collectAllPackageNames(deps[dep], names);
+    }
+    return names;
+}
+export async function printTree(node, prefix = "", isLast = true, pkgName = "root", vulnerabilities = {}, chain = [], depth = 0, maxDepth) {
+    if (maxDepth !== undefined && depth > maxDepth)
+        return;
     const version = node.version || "";
-    const latest = pkgName !== "root" ? getLatestVersion(pkgName) : version;
-    const isOutdated = latest !== version;
+    const latest = pkgName !== "root"
+        ? (latestVersionMap.get(pkgName) ?? getLatestVersion(pkgName))
+        : version;
+    const isOutdated = latest !== version && latest !== "unknown";
     const vuln = vulnerabilities[pkgName];
     let label = `${pkgName}@${version}`;
-    // Outdated Dependency :
     if (isOutdated && pkgName !== "root") {
         label += chalk.yellow(` (latest: ${latest})`);
     }
-    // Vulnerability :
     if (vuln) {
         label += chalk.red(` ❌ ${vuln.toUpperCase()}`);
     }
@@ -18,9 +37,10 @@ export async function printTree(node, prefix = "", isLast = true, pkgName = "roo
     console.log(branch + label);
     const deps = node.dependencies || {};
     const keys = Object.keys(deps);
-    keys.forEach((dep, index) => {
-        const isChildLast = index === keys.length - 1;
-        printTree(deps[dep], prefix + (isLast ? "    " : "│   "), isChildLast, dep, vulnerabilities, [...chain, dep]);
-    });
+    for (let i = 0; i < keys.length; i++) {
+        const dep = keys[i];
+        const isChildLast = i === keys.length - 1;
+        await printTree(deps[dep], prefix + (isLast ? "    " : "│   "), isChildLast, dep, vulnerabilities, [...chain, dep], depth + 1, maxDepth);
+    }
 }
 //# sourceMappingURL=tree.js.map

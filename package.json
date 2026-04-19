@@ -1,6 +1,6 @@
 {
   "name": "dep-inspector-cli",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "AI powered dependency inspector for JavaScript/TypeScript projects",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

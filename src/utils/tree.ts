@@ -3,51 +3,78 @@ import { getLatestVersion } from "./version.js";
 
 type VulnerabilityMap = Record<string, string>;
 
+const latestVersionMap = new Map<string, string>();
+
+export function prefetchVersions(pkgNames: string[]): void {
+  const unique = [...new Set(pkgNames)];
+  for (const pkg of unique) {
+    if (!latestVersionMap.has(pkg)) {
+      latestVersionMap.set(pkg, getLatestVersion(pkg));
+    }
+  }
+}
+
+export function collectAllPackageNames(
+  node: any,
+  names: Set<string> = new Set()
+): Set<string> {
+  const deps: Record<string, any> = node.dependencies || {};
+  for (const dep of Object.keys(deps)) {
+    names.add(dep);
+    collectAllPackageNames(deps[dep], names);
+  }
+  return names;
+}
+
 export async function printTree(
   node: any,
   prefix = "",
   isLast = true,
   pkgName = "root",
   vulnerabilities: VulnerabilityMap = {},
-  chain: string[] = []
-) {
-  const version = node.version || "";
-  const latest =
-    pkgName !== "root" ? getLatestVersion(pkgName) : version;
+  chain: string[] = [],
+  depth = 0,
+  maxDepth?: number
+): Promise<void> {
+  if (maxDepth !== undefined && depth > maxDepth) return;
 
-  const isOutdated = latest !== version;
+  const version: string = node.version || "";
+  const latest: string =
+    pkgName !== "root"
+      ? (latestVersionMap.get(pkgName) ?? getLatestVersion(pkgName))
+      : version;
 
-  const vuln = vulnerabilities[pkgName];
+  const isOutdated = latest !== version && latest !== "unknown";
+  const vuln: string | undefined = vulnerabilities[pkgName];
 
   let label = `${pkgName}@${version}`;
 
-  // Outdated Dependency :
   if (isOutdated && pkgName !== "root") {
     label += chalk.yellow(` (latest: ${latest})`);
   }
 
-  // Vulnerability :
   if (vuln) {
     label += chalk.red(` ❌ ${vuln.toUpperCase()}`);
   }
 
   const branch = prefix + (isLast ? "└── " : "├── ");
-
   console.log(branch + label);
 
-  const deps = node.dependencies || {};
-  const keys = Object.keys(deps);
+  const deps: Record<string, any> = node.dependencies || {};
+  const keys: string[] = Object.keys(deps);
 
-  keys.forEach((dep, index) => {
-    const isChildLast = index === keys.length - 1;
-
-    printTree(
+  for (let i = 0; i < keys.length; i++) {
+    const dep = keys[i] as string;
+    const isChildLast = i === keys.length - 1;
+    await printTree(
       deps[dep],
       prefix + (isLast ? "    " : "│   "),
       isChildLast,
       dep,
       vulnerabilities,
-      [...chain, dep]
+      [...chain, dep],
+      depth + 1,
+      maxDepth
     );
-  });
+  }
 }
