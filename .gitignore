@@ -1,7 +1,7 @@
 node_modules/
 dist/
 
-# Environment variables
+# Environment :
 .env
 .env.local
 .env.*.local
