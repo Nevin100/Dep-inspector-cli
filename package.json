@@ -24,8 +24,11 @@
   "scripts": {
     "build": "tsc",
     "dev": "ts-node src/index.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepublishOnly": "npm run build"
+},
+"files": ["dist"],
+"engines": { "node": ">=16" },
   "author": "Nevin Bali",
   "license": "MIT",
   "type": "module",

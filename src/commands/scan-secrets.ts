@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { spawnSync } from "child_process";
 import chalk from "chalk";
 
 // Secret patterns — no AI needed
@@ -17,11 +18,9 @@ const SECRET_PATTERNS: { name: string; pattern: RegExp; severity: "HIGH" | "MEDI
   { name: "Razorpay Secret",       pattern: /rzp_live_[a-zA-Z0-9]{14,}/,               severity: "HIGH" },
   { name: "Generic Password",      pattern: /password\s*[:=]\s*['"][^'"]{6,}/i,         severity: "MEDIUM" },
   { name: "Generic Secret",        pattern: /secret\s*[:=]\s*['"][^'"]{6,}/i,           severity: "MEDIUM" },
-  { name: ".env file committed",   pattern: /^\.env$/,                                  severity: "HIGH" }, // filename check
 ];
 
 const IGNORE_DIRS = ["node_modules", ".git", "dist", ".next", "build", "coverage"];
-const IGNORE_FILES = [".env", ".env.local", ".env.development", ".env.production"];
 const SCAN_EXTENSIONS = [".ts", ".js", ".tsx", ".jsx", ".env", ".json", ".yaml", ".yml", ".sh"];
 
 interface Finding {
@@ -33,18 +32,38 @@ interface Finding {
 }
 
 function shouldIgnore(filePath: string): boolean {
-  const fileName = path.basename(filePath);
-  if (IGNORE_FILES.includes(fileName)) return true;  // 👈 add this
   return IGNORE_DIRS.some((dir) => filePath.includes(`/${dir}/`));
 }
 
-function checkEnvInGitignore(): void {
-  if (!fs.existsSync(".gitignore")) {
+function isEnvFile(filePath: string): boolean {
+  const base = path.basename(filePath);
+  return base === ".env" || base.startsWith(".env.");
+}
+
+// Is this file actually tracked by git? (spawnSync — no shell, no injection)
+function isTrackedByGit(filePath: string): boolean {
+  const r = spawnSync("git", ["ls-files", "--error-unmatch", filePath], {
+    stdio: "pipe",
+    timeout: 5000,
+  });
+  return r.status === 0;
+}
+
+// Never print a full secret to the terminal / CI logs
+function redact(line: string): string {
+  const t = line.trim().slice(0, 80);
+  return t.length > 12 ? t.slice(0, 8) + "…[redacted]" : t;
+}
+
+function checkEnvInGitignore(targetDir: string): void {
+  const giPath = path.join(targetDir, ".gitignore");
+  if (!fs.existsSync(giPath)) {
     console.log(chalk.red("[HIGH] .gitignore missing — .env may get committed to git"));
     return;
   }
-  const gitignore = fs.readFileSync(".gitignore", "utf-8");
-  if (!gitignore.includes(".env")) {
+  const lines = fs.readFileSync(giPath, "utf-8").split("\n").map((l) => l.trim());
+  const ignored = lines.some((l) => l === ".env" || l === ".env*");
+  if (!ignored) {
     console.log(chalk.red("[HIGH] .env is NOT in .gitignore — risk of secret exposure in git"));
   } else {
     console.log(chalk.green("✅ .env is gitignored"));
@@ -54,10 +73,27 @@ function checkEnvInGitignore(): void {
 function scanFile(filePath: string): Finding[] {
   const findings: Finding[] = [];
   const ext = path.extname(filePath);
-  if (!SCAN_EXTENSIONS.includes(ext) && !filePath.endsWith(".env")) return findings;
+  if (!SCAN_EXTENSIONS.includes(ext) && !isEnvFile(filePath)) return findings;
   if (shouldIgnore(filePath)) return findings;
 
-  const lines = fs.readFileSync(filePath, "utf-8").split("\n");
+  // .env committed to git = HIGH, regardless of content
+  if (isEnvFile(filePath) && isTrackedByGit(filePath)) {
+    findings.push({
+      file: filePath,
+      line: 0,
+      pattern: ".env file committed to git",
+      severity: "HIGH",
+      preview: path.basename(filePath),
+    });
+  }
+
+  let lines: string[];
+  try {
+    lines = fs.readFileSync(filePath, "utf-8").split("\n");
+  } catch {
+    return findings;
+  }
+
   lines.forEach((line, idx) => {
     for (const { name, pattern, severity } of SECRET_PATTERNS) {
       if (pattern.test(line)) {
@@ -66,9 +102,9 @@ function scanFile(filePath: string): Finding[] {
           line: idx + 1,
           pattern: name,
           severity,
-          preview: line.trim().slice(0, 80), 
+          preview: redact(line),
         });
-        break; 
+        break;
       }
     }
   });
@@ -106,8 +142,8 @@ export async function scanSecrets(options: { dir: string; json?: boolean; ai?: b
 
   console.log(chalk.bold.cyan("\n🔐 Secrets Scanner\n"));
 
-  checkEnvInGitignore();
-  
+  checkEnvInGitignore(targetDir);
+
   if (allFindings.length === 0) {
     console.log(chalk.green("✅ No secrets detected!"));
     return;
@@ -121,7 +157,7 @@ export async function scanSecrets(options: { dir: string; json?: boolean; ai?: b
   for (const f of allFindings) {
     const color = f.severity === "HIGH" ? chalk.red : chalk.yellow;
     console.log(color(`[${f.severity}] ${f.pattern}`));
-    console.log(`  File : ${f.file}:${f.line}`);
+    console.log(`  File : ${f.file}${f.line ? ":" + f.line : ""}`);
     console.log(`  Code : ${chalk.gray(f.preview)}\n`);
   }
 
@@ -130,8 +166,8 @@ export async function scanSecrets(options: { dir: string; json?: boolean; ai?: b
     if (!key) {
       console.log(chalk.gray("ℹ️  AI insights skipped — GROQ_API_KEY not set"));
     } else {
-      // dynamic import to avoid breaking non-AI usage
       const { analyzeWithAI } = await import("../utils/ai.js");
+      // previews are already redacted — no raw secrets leave the machine
       const summary = await analyzeWithAI(
         allFindings.map((f) => `${f.pattern} in ${f.file}:${f.line}`).join("\n")
       );

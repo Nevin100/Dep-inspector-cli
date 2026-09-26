@@ -1,5 +1,5 @@
-import { execSync } from "child_process";
 import semver from "semver";
+import { spawnSync } from "child_process";
 
 const versionCache = new Map<string, string>();
 export interface PackageInfo {
@@ -12,33 +12,40 @@ export interface PackageInfo {
 
 const infoCache = new Map<string, PackageInfo>();
 
-export function getLatestVersion(pkg: string): string {
-  if (versionCache.has(pkg)) return versionCache.get(pkg)!;
+function npmView(args: string[]): string | null {
   try {
-    const v = execSync(`npm view ${pkg} version`, {
-      encoding: "utf-8",
-      timeout: 5000,
-    }).trim();
-    versionCache.set(pkg, v);
-    return v;
-  } catch {
-    versionCache.set(pkg, "unknown");
-    return "unknown";
-  }
-}
-
-export function getPackageFullInfo(pkg: string): PackageInfo {
-  if (infoCache.has(pkg)) return infoCache.get(pkg)!;
-  try {
-    const res = execSync(`npm view ${pkg} --json`, {
+    const r = spawnSync("npm", ["view", ...args], {
       encoding: "utf-8",
       timeout: 5000,
     });
-    const data = JSON.parse(res);
+    if (r.status !== 0) return null;
+    return r.stdout.trim();
+  } catch {
+    return null;
+  }
+}
+export function getLatestVersion(pkg: string): string {
+  if (versionCache.has(pkg)) return versionCache.get(pkg)!;
+  const v = npmView([pkg, "version"]) || "unknown";
+  versionCache.set(pkg, v);
+  return v;
+}
+export function getPackageFullInfo(pkg: string): PackageInfo {
+  if (infoCache.has(pkg)) return infoCache.get(pkg)!;
+  const raw = npmView([pkg, "--json"]);
+  const fallback: PackageInfo = { version: "unknown" };
+  if (!raw) {
+    infoCache.set(pkg, fallback);
+    return fallback;
+  }
+  try {
+    const data = JSON.parse(raw);
     const info: PackageInfo = {
       version: data.version || "unknown",
       homepage: data.homepage,
-      author: data.author?.name || (typeof data.author === "string" ? data.author : undefined),
+      author:
+        data.author?.name ||
+        (typeof data.author === "string" ? data.author : undefined),
       repo: data.repository?.url,
       description: data.description,
     };
@@ -46,7 +53,6 @@ export function getPackageFullInfo(pkg: string): PackageInfo {
     versionCache.set(pkg, info.version);
     return info;
   } catch {
-    const fallback: PackageInfo = { version: "unknown" };
     infoCache.set(pkg, fallback);
     return fallback;
   }
