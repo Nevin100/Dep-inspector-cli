@@ -1,5 +1,5 @@
 import semver from "semver";
-import { spawnSync } from "child_process";
+import { spawn, spawnSync } from "child_process";
 
 const versionCache = new Map<string, string>();
 export interface PackageInfo {
@@ -30,6 +30,28 @@ export function getLatestVersion(pkg: string): string {
   versionCache.set(pkg, v);
   return v;
 }
+
+function npmViewAsync(args: string[]): Promise<string | null> {
+  return new Promise((resolve) => {
+    const child = spawn("npm", ["view", ...args], { timeout: 8000 });
+    let out = "";
+    child.stdout.on("data", (d) => {
+      out += d.toString();
+    });
+    child.on("error", () => resolve(null));
+    child.on("close", (code) => resolve(code === 0 ? out.trim() : null));
+  });
+}
+
+// Non-blocking variant for the concurrent prefetcher in tree.ts
+export async function getLatestVersionAsync(pkg: string): Promise<string> {
+  if (versionCache.has(pkg)) return versionCache.get(pkg)!;
+  const v = (await npmViewAsync([pkg, "version"])) || "unknown";
+  versionCache.set(pkg, v);
+  return v;
+}
+
+
 export function getPackageFullInfo(pkg: string): PackageInfo {
   if (infoCache.has(pkg)) return infoCache.get(pkg)!;
   const raw = npmView([pkg, "--json"]);

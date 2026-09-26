@@ -89,7 +89,7 @@ export async function analyzeProject(options?: AnalyzeOptions): Promise<boolean>
 
   // Collect all package names and prefetch versions in batch
   const allPkgNames = [...collectAllPackageNames(tree)];
-  prefetchVersions(allPkgNames);
+  await prefetchVersions(allPkgNames);
 
   spinner.stop();
 

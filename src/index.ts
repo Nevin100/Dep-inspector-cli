@@ -14,7 +14,12 @@ const program = new Command();
 program
   .name("dep-inspector")
   .description("DevOps-grade dependency & security toolkit")
-  .version("2.1.0");
+  .version("2.2.0");
+
+// NOTE: --ai / --json / --fail-on are declared on the root program AND on
+// subcommands. Commander assigns a shadowed option's value to the PARENT, so
+// every action merges via cmd.optsWithGlobals() — otherwise --json/--fail-on
+// silently stop working on subcommands.
 
 // V1 — existing
 function addAnalyzeOptions(cmd: Command) {
@@ -24,10 +29,11 @@ function addAnalyzeOptions(cmd: Command) {
     .option("--depth <number>", "Limit dependency tree depth", parseInt)
     .option("--fail-on <level>", "Exit 1 if findings at/above severity (high|medium|low)");
 }
-addAnalyzeOptions(program).action(async (options) => { await analyzeProject(options); });
+
+addAnalyzeOptions(program).action(async (_opts, cmd) => { await analyzeProject(cmd.optsWithGlobals()); });
 addAnalyzeOptions(
   program.command("analyze").description("Analyze dependencies (V1)")
-).action(async (options) => { await analyzeProject(options); });
+).action(async (_opts, cmd) => { await analyzeProject(cmd.optsWithGlobals()); });
 
 // V2 — new scan commands
 program
@@ -37,7 +43,7 @@ program
   .option("--json", "Output as JSON")
   .option("--ai", "AI-powered explanation (optional, needs GROQ_API_KEY)")
   .option("--fail-on <level>", "Exit 1 if findings at/above severity (high|medium|low)")
-  .action(async (options) => { await scanSecrets(options); });
+  .action(async (_opts, cmd) => { await scanSecrets(cmd.optsWithGlobals()); });
 
 program
   .command("scan:docker")
@@ -45,7 +51,7 @@ program
   .option("--file <path>", "Path to Dockerfile", "Dockerfile")
   .option("--json", "Output as JSON")
   .option("--fail-on <level>", "Exit 1 if findings at/above severity (high|medium|low)")
-  .action(async (options) => { await scanDocker(options); });
+  .action(async (_opts, cmd) => { await scanDocker(cmd.optsWithGlobals()); });
 
 program
   .command("scan:ci")
@@ -53,19 +59,19 @@ program
   .option("--dir <path>", "Workflows directory", ".github/workflows")
   .option("--json", "Output as JSON")
   .option("--fail-on <level>", "Exit 1 if findings at/above severity (high|medium|low)")
-  .action(async (options) => { await scanCI(options); });
+  .action(async (_opts, cmd) => { await scanCI(cmd.optsWithGlobals()); });
 
 program
   .command("scan:ports")
   .description("Check open ports and running processes")
   .option("--json", "Output as JSON")
-  .action(async (options) => { await scanPorts(options); });
+  .action(async (_opts, cmd) => { await scanPorts(cmd.optsWithGlobals()); });
 
 program
   .command("scan:logs")
   .description("Check Winston/Morgan logger configuration health")
   .option("--json", "Output as JSON")
-  .action(async (options) => { await scanLogs(options); });
+  .action(async (_opts, cmd) => { await scanLogs(cmd.optsWithGlobals()); });
 
 program
   .command("scan:all")
@@ -73,6 +79,6 @@ program
   .option("--ai", "AI summary (optional)")
   .option("--json", "Output as JSON")
   .option("--fail-on <level>", "Exit 1 if findings at/above severity (high|medium|low)")
-  .action(async (options) => { await scanAll(options); });
+  .action(async (_opts, cmd) => { await scanAll(cmd.optsWithGlobals()); });
 
 program.parse();

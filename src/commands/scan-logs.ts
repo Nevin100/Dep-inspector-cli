@@ -23,8 +23,14 @@ export async function scanLogs(options: { json?: boolean }) {
   const hasWinston = "winston" in allDeps;
   const hasMorgan  = "morgan" in allDeps;
   const hasPino    = "pino" in allDeps;
+  const hasLogger  = hasWinston || hasMorgan || hasPino;
 
-  if (!hasWinston && !hasMorgan && !hasPino) {
+  const isContainerized =
+    fs.existsSync("Dockerfile") ||
+    fs.existsSync("docker-compose.yml") ||
+    fs.existsSync("compose.yaml");
+
+  if (!hasLogger) {
     if (pkg.bin !== undefined) {
       passed.push("CLI tool detected — console output is fine, no logger required");
     } else {
@@ -34,26 +40,28 @@ export async function scanLogs(options: { json?: boolean }) {
     if (hasWinston) passed.push("winston detected");
     if (hasMorgan)  passed.push("morgan detected");
     if (hasPino)    passed.push("pino detected");
+
+    // LOG_LEVEL only matters when a real logger exists (no false positive for CLI tools)
+    const envFile = fs.existsSync(".env") ? fs.readFileSync(".env", "utf-8") : "";
+    if (!envFile.includes("LOG_LEVEL") && !process.env["LOG_LEVEL"]) {
+      issues.push("LOG_LEVEL not set — logger may default to verbose in production");
+    }
   }
 
-  // Check for winston transports (file rotation)
+  // Rotation advice is environment-aware: in containers, file transports are
+  // an anti-pattern — log JSON to stdout and let the platform collect it.
   if (hasWinston) {
-    const hasRotation = "winston-daily-rotate-file" in allDeps;
-    if (!hasRotation) {
+    if (isContainerized) {
+      passed.push("containerized setup — prefer stdout JSON logs over file transports");
+    } else if (!("winston-daily-rotate-file" in allDeps)) {
       issues.push("winston-daily-rotate-file not found — logs may grow unbounded");
     } else {
       passed.push("log rotation configured");
     }
   }
 
-  // Check for LOG_LEVEL env usage (.env file ya shell env, dono me se kahin bhi)
-  const envFile = fs.existsSync(".env") ? fs.readFileSync(".env", "utf-8") : "";
-  if (!envFile.includes("LOG_LEVEL") && !process.env["LOG_LEVEL"]) {
-    issues.push("LOG_LEVEL not set — logger may default to verbose in production");
-  }
-
   if (options.json) {
-    console.log(JSON.stringify({ issues, passed }, null, 2));
+    console.log(JSON.stringify({ issues, passed, containerized: isContainerized }, null, 2));
     return;
   }
 

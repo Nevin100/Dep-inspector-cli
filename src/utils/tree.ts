@@ -1,18 +1,28 @@
 import chalk from "chalk";
-import { getLatestVersion } from "./version.js";
+import { getLatestVersion, getLatestVersionAsync } from "./version.js";
 
 type VulnerabilityMap = Record<string, string>;
 
 const latestVersionMap = new Map<string, string>();
 
-export function prefetchVersions(pkgNames: string[]): void {
-  const unique = [...new Set(pkgNames)];
-  for (const pkg of unique) {
-    if (!latestVersionMap.has(pkg)) {
-      latestVersionMap.set(pkg, getLatestVersion(pkg));
+const PREFETCH_CONCURRENCY = 8;
+
+export async function prefetchVersions(pkgNames: string[]): Promise<void> {
+  const queue = [...new Set(pkgNames)].filter((p) => !latestVersionMap.has(p));
+  // Bounded worker pool: 8 concurrent `npm view` calls instead of serial.
+  // 200 packages ≈ 200×~300ms serial vs ~25 batches concurrent.
+  const workers = Array.from(
+    { length: Math.min(PREFETCH_CONCURRENCY, queue.length) },
+    async () => {
+      while (queue.length > 0) {
+        const pkg = queue.pop()!;
+        latestVersionMap.set(pkg, await getLatestVersionAsync(pkg));
+      }
     }
-  }
+  );
+  await Promise.all(workers);
 }
+
 
 export function collectAllPackageNames(
   node: any,
