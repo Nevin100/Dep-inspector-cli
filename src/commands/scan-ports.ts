@@ -22,11 +22,15 @@ export async function scanPorts(options: { json?: boolean }) {
     .split("\n")
     .filter((l) => l.includes("LISTEN") || l.includes("0.0.0.0"));
   const openPorts: { port: number; process: string; warning?: string }[] = [];
+  const seen = new Set<number>();
 
   for (const line of lines) {
     const portMatch = line.match(/:(\d+)\s/);
     if (!portMatch) continue;
     const port = parseInt(portMatch[1] ?? "0");
+    if (seen.has(port)) continue; // TCP/UDP ya v4/v6 duplicate hatao
+    seen.add(port);
+
     const isExposed = line.includes("0.0.0.0") || line.includes("*:");
     const isSuspicious = SUSPICIOUS_PORTS.includes(port) && isExposed;
 

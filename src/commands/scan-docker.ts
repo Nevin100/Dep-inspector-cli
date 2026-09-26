@@ -50,14 +50,18 @@ function analyzeDockerfile(content: string): DockerIssue[] {
 }
 
 export async function scanDocker(options: { file: string; compose?: string; json?: boolean }) {
-  const issues: DockerIssue[] = [];
-
-  if (fs.existsSync(options.file)) {
-    const content = fs.readFileSync(options.file, "utf-8");
-    issues.push(...analyzeDockerfile(content));
-  } else {
-    console.log(chalk.yellow(`⚠️  Dockerfile not found at ${options.file}`));
+  if (!fs.existsSync(options.file)) {
+    if (options.json) {
+      console.log(JSON.stringify({ issues: [], total: 0, skipped: "Dockerfile not found" }, null, 2));
+    } else {
+      console.log(chalk.bold.cyan("\n🐳 Docker Analysis\n"));
+      console.log(chalk.yellow(`⚠️  Dockerfile not found at ${options.file} — skipping`));
+    }
+    return;
   }
+
+  const content = fs.readFileSync(options.file, "utf-8");
+  const issues = analyzeDockerfile(content);
 
   if (options.json) {
     console.log(JSON.stringify({ issues, total: issues.length }, null, 2));

@@ -15,7 +15,9 @@ export async function scanLogs(options: { json?: boolean }) {
   const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8")) as {
     dependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;
+    bin?: Record<string, string> | string;
   };
+
   const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
 
   const hasWinston = "winston" in allDeps;
@@ -23,7 +25,11 @@ export async function scanLogs(options: { json?: boolean }) {
   const hasPino    = "pino" in allDeps;
 
   if (!hasWinston && !hasMorgan && !hasPino) {
-    issues.push("No logger found (winston/morgan/pino) — console.log is not production-grade");
+    if (pkg.bin !== undefined) {
+      passed.push("CLI tool detected — console output is fine, no logger required");
+    } else {
+      issues.push("No logger found (winston/morgan/pino) — console.log is not production-grade");
+    }
   } else {
     if (hasWinston) passed.push("winston detected");
     if (hasMorgan)  passed.push("morgan detected");
@@ -40,10 +46,10 @@ export async function scanLogs(options: { json?: boolean }) {
     }
   }
 
-  // Check for LOG_LEVEL env usage
+  // Check for LOG_LEVEL env usage (.env file ya shell env, dono me se kahin bhi)
   const envFile = fs.existsSync(".env") ? fs.readFileSync(".env", "utf-8") : "";
-  if (!envFile.includes("LOG_LEVEL")) {
-    issues.push("LOG_LEVEL not set in .env — logger may default to verbose in production");
+  if (!envFile.includes("LOG_LEVEL") && !process.env["LOG_LEVEL"]) {
+    issues.push("LOG_LEVEL not set — logger may default to verbose in production");
   }
 
   if (options.json) {
