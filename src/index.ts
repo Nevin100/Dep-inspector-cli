@@ -14,7 +14,7 @@ const program = new Command();
 program
   .name("dep-inspector")
   .description("DevOps-grade dependency & security toolkit")
-  .version("2.0.0");
+  .version("2.0.1");
   
 // V1 — existing
 function addAnalyzeOptions(cmd: Command) {

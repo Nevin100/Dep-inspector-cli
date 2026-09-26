@@ -1,6 +1,6 @@
 {
   "name": "dep-inspector-cli",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "DevOps-grade dependency, security & infrastructure scanner for Node.js projects",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
