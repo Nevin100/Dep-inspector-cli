@@ -14,8 +14,7 @@
 
 Version 2 transforms `dep-inspector` from a dependency analyzer into a full **DevOps security toolkit** — covering secrets, Docker, CI/CD pipelines, ports, and logging. All features work **without any API key**. AI insights are optional.
 
-- **v2.3.0** — 📌 Baseline mode (`--baseline` / `--update-baseline`): bless current findings once, then fail CI only on new findings.
-- **v2.2.0** — `--fail-on high|medium|low` exit codes on every finding-based command.
+- **v2.2.1** — `--fail-on high|medium|low` exit codes on every finding-based command.
 
 ---
 

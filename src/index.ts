@@ -14,7 +14,7 @@ const program = new Command();
 program
   .name("dep-inspector")
   .description("DevOps-grade dependency & security toolkit")
-  .version("2.2.0");
+  .version("2.2.1");
 
 // NOTE: --ai / --json / --fail-on are declared on the root program AND on
 // subcommands. Commander assigns a shadowed option's value to the PARENT, so
