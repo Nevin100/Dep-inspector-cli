@@ -1,5 +1,6 @@
 import fs from "fs";
 import chalk from "chalk";
+import { failIfBreached } from "../utils/exit.js";
 
 interface DockerIssue {
   severity: "HIGH" | "MEDIUM" | "LOW";
@@ -49,7 +50,7 @@ function analyzeDockerfile(content: string): DockerIssue[] {
   return issues;
 }
 
-export async function scanDocker(options: { file: string; compose?: string; json?: boolean }) {
+export async function scanDocker(options: { file: string; json?: boolean; failOn?: string; exitOnFail?: boolean }): Promise<boolean> {
   if (!fs.existsSync(options.file)) {
     if (options.json) {
       console.log(JSON.stringify({ issues: [], total: 0, skipped: "Dockerfile not found" }, null, 2));
@@ -57,7 +58,7 @@ export async function scanDocker(options: { file: string; compose?: string; json
       console.log(chalk.bold.cyan("\n🐳 Docker Analysis\n"));
       console.log(chalk.yellow(`⚠️  Dockerfile not found at ${options.file} — skipping`));
     }
-    return;
+    return false;
   }
 
   const content = fs.readFileSync(options.file, "utf-8");
@@ -65,14 +66,14 @@ export async function scanDocker(options: { file: string; compose?: string; json
 
   if (options.json) {
     console.log(JSON.stringify({ issues, total: issues.length }, null, 2));
-    return;
+    return failIfBreached(issues.map((i) => i.severity), options);
   }
 
   console.log(chalk.bold.cyan("\n🐳 Docker Analysis\n"));
 
   if (issues.length === 0) {
     console.log(chalk.green("✅ Dockerfile looks good!"));
-    return;
+    return failIfBreached([], options);
   }
 
   for (const issue of issues) {
@@ -80,4 +81,6 @@ export async function scanDocker(options: { file: string; compose?: string; json
     console.log(color(`[${issue.severity}] ${issue.message}`));
   }
   console.log();
+
+  return failIfBreached(issues.map((i) => i.severity), options);
 }

@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { spawnSync } from "child_process";
 import chalk from "chalk";
+import { failIfBreached } from "../utils/exit.js";
 
 // Secret patterns — no AI needed
 const SECRET_PATTERNS: { name: string; pattern: RegExp; severity: "HIGH" | "MEDIUM" | "LOW" }[] = [
@@ -126,7 +127,7 @@ function walkDir(dir: string): string[] {
   return files;
 }
 
-export async function scanSecrets(options: { dir: string; json?: boolean; ai?: boolean }) {
+export async function scanSecrets(options: { dir: string; json?: boolean; ai?: boolean; failOn?: string; exitOnFail?: boolean }): Promise<boolean> {
   const targetDir = path.resolve(options.dir);
   const allFiles = walkDir(targetDir);
   const allFindings: Finding[] = [];
@@ -137,7 +138,7 @@ export async function scanSecrets(options: { dir: string; json?: boolean; ai?: b
 
   if (options.json) {
     console.log(JSON.stringify({ findings: allFindings, total: allFindings.length }, null, 2));
-    return;
+    return failIfBreached(allFindings.map((f) => f.severity), options);
   }
 
   console.log(chalk.bold.cyan("\n🔐 Secrets Scanner\n"));
@@ -146,7 +147,7 @@ export async function scanSecrets(options: { dir: string; json?: boolean; ai?: b
 
   if (allFindings.length === 0) {
     console.log(chalk.green("✅ No secrets detected!"));
-    return;
+    return failIfBreached([], options);
   }
 
   const highCount = allFindings.filter((f) => f.severity === "HIGH").length;
@@ -174,4 +175,6 @@ export async function scanSecrets(options: { dir: string; json?: boolean; ai?: b
       console.log(chalk.cyan("\n💡 AI Insights\n") + summary);
     }
   }
+
+  return failIfBreached(allFindings.map((f) => f.severity), options);
 }

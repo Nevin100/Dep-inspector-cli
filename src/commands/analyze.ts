@@ -9,6 +9,7 @@ import {
 import { runAudit } from "../utils/audit.js";
 import { getPackageFullInfo, detectBreaking } from "../utils/version.js";
 import { analyzeWithAI } from "../utils/ai.js";
+import { failIfBreached } from "../utils/exit.js";
 
 // Extract vulnerabilities from audit output
 function extractVulnerabilities(audit: any) {
@@ -65,9 +66,11 @@ export interface AnalyzeOptions {
   ai?: boolean;
   json?: boolean;
   depth?: number;
+  failOn?: string;
+  exitOnFail?: boolean;
 }
 
-export async function analyzeProject(options?: AnalyzeOptions) {
+export async function analyzeProject(options?: AnalyzeOptions): Promise<boolean> {
   const spinner = ora("🔍 Analyzing dependencies...").start();
 
   let tree: any;
@@ -120,7 +123,7 @@ export async function analyzeProject(options?: AnalyzeOptions) {
     }
 
     console.log(JSON.stringify(jsonOutput, null, 2));
-    return;
+    return failIfBreached(Object.values(vulnMap), options ?? {});
   }
 
   // Normal output mode
@@ -131,7 +134,7 @@ export async function analyzeProject(options?: AnalyzeOptions) {
 
   if (Object.keys(vulnMap).length === 0) {
     console.log(chalk.green("✅ No vulnerabilities found\n"));
-    return;
+    return failIfBreached([], options ?? {});
   }
 
   let aiInput = "";
@@ -196,4 +199,6 @@ export async function analyzeProject(options?: AnalyzeOptions) {
   }
 
   console.log(chalk.gray("\n✨ Analysis Complete\n"));
+
+  return failIfBreached(Object.values(vulnMap), options ?? {});
 }
