@@ -6,7 +6,7 @@
 [![npm downloads](https://img.shields.io/npm/dw/dep-inspector-cli)](https://www.npmjs.com/package/dep-inspector-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/Nevin100/Dep-inspector-nevin/pulls)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/Nevin100/Dep-inspector-cli/pulls)
 
 ---
 
@@ -14,20 +14,22 @@
 
 Version 2 transforms `dep-inspector` from a dependency analyzer into a full **DevOps security toolkit** — covering secrets, Docker, CI/CD pipelines, ports, and logging. All features work **without any API key**. AI insights are optional.
 
+- **v2.3.0** — 📌 Baseline mode (`--baseline` / `--update-baseline`): bless current findings once, then fail CI only on new findings.
+- **v2.2.0** — `--fail-on high|medium|low` exit codes on every finding-based command.
+
 ---
 
 ## Features
 
 | Command | What it does |
-|---|---|
+| --- | --- |
 | `dep-inspector` | Dependency tree + vulnerability scan (v1) |
 | `scan:secrets` | Detect hardcoded API keys, .env leaks, private keys |
-| `scan:vulns` | npm audit wrapper with severity thresholds |
-| `scan:docker` | Dockerfile & docker-compose security analysis |
+| `scan:docker` | Dockerfile security analysis |
 | `scan:ci` | GitHub Actions workflow linting |
 | `scan:ports` | Open port detection & process monitoring |
 | `scan:logs` | Winston/Morgan/Pino logger health check |
-| `scan:all` | Run everything, generate a full report |
+| `scan:all` | Run everything, one report, one exit code |
 
 ---
 
@@ -72,23 +74,49 @@ dep-inspector scan:all                   # Full DevOps scan
 dep-inspector scan:all --report          # + saves HTML report
 dep-inspector scan:all --json            # + JSON output
 dep-inspector scan:all --ai              # + AI summary (optional)
+
+dep-inspector scan:all --fail-on high    # Exit code 1 only on HIGH findings
 ```
+
+### Baseline mode (for legacy repos)
+
+200 old findings shouldn't block CI adoption. Bless the current state once, then fail only on new findings:
+
+```bash
+# Bless all current findings as "known" (creates .dep-inspector-baseline.json)
+dep-inspector scan:all --update-baseline
+
+# From now on, only NEW findings fail the build
+dep-inspector scan:all --baseline
+
+# Custom baseline file location
+dep-inspector scan:all --baseline --baseline-file ./config/baseline.json
+```
+
+- Works on `analyze`, `scan:secrets`, `scan:docker`, `scan:ci`, `scan:all`
+- One shared `.dep-inspector-baseline.json`, fingerprints namespaced per scanner
+- `--baseline-file <path>` for a custom location
+- Fingerprints use relative paths and include the installed version for deps — works across laptop and CI, and re-reports a package after you upgrade it
 
 ---
 
 ## What gets detected
 
 ### `scan:secrets`
+
 - AWS Access Keys & Secret Keys
 - OpenAI, Groq, GitHub tokens
 - Hardcoded JWT secrets
 - MongoDB / PostgreSQL connection strings
 - Stripe & Razorpay live keys
 - Generic `password=` / `secret=` assignments
-- Accidentally committed `.env` files
+- `.env` files committed to git (checked via `git ls-files`, not filename guessing)
+- `.env` missing from `.gitignore`
+- Previews are redacted — full secrets never hit your terminal or CI logs
 
 ### `scan:docker`
-- Container running as root (no `USER` directive)
+
+- Container running as root (no non-root `USER`)
 - Missing `HEALTHCHECK`
 - `:latest` tag usage (non-reproducible builds)
 - Secrets hardcoded in `ENV`/`ARG`
@@ -97,6 +125,7 @@ dep-inspector scan:all --ai              # + AI summary (optional)
 - Single-stage builds (image size warning)
 
 ### `scan:ci`
+
 - Hardcoded secrets in workflow YAML
 - Deprecated `::set-output` command
 - `pull_request_target` + `actions/checkout` (privilege escalation risk)
@@ -105,14 +134,17 @@ dep-inspector scan:all --ai              # + AI summary (optional)
 - No `timeout-minutes` (stuck jobs)
 
 ### `scan:ports`
-- Lists all open/listening ports
+
+- Lists all open/listening ports, deduplicated
 - Flags database ports (Redis, MongoDB, PostgreSQL, MySQL) publicly exposed
 - Flags FTP, Telnet, and other insecure services
 
 ### `scan:logs`
+
 - Detects missing logger (console.log in production)
 - Checks for `winston-daily-rotate-file` (log rotation)
-- Validates `LOG_LEVEL` environment variable
+- Container-aware: recommends stdout JSON logging instead of file transports when a Dockerfile is present
+- Validates `LOG_LEVEL` environment variable (only when a real logger exists — no false positives for CLI tools)
 
 ---
 
@@ -125,13 +157,23 @@ dep-inspector scan:secrets --json > secrets-report.json
 dep-inspector scan:all --json > full-report.json
 ```
 
+JSON includes `baselineSuppressed` counts when baseline mode is on.
+
 Severity levels: `HIGH` · `MEDIUM` · `LOW`
+
+### Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Clean (or only below-threshold findings) |
+| 1 | Findings at/above `--fail-on` threshold |
+| 2 | Invalid `--fail-on` level |
 
 ---
 
 ## AI Setup (optional)
 
-The `--ai` flag sends findings to Groq LLM for human-readable explanations and fix suggestions. It is **completely optional** — every scan works without it.
+The `--ai` flag sends findings to Groq LLM for human-readable explanations and fix suggestions. It is **completely optional** — every scan works without it. Secret previews are redacted before anything leaves your machine.
 
 ```bash
 # Set once in your shell profile or .env
@@ -176,6 +218,14 @@ jobs:
         with:
           name: dep-inspector-reports
           path: "*.json"
+```
+
+First time on a legacy repo? Bless the baseline once and commit it:
+
+```bash
+dep-inspector scan:all --update-baseline
+git add .dep-inspector-baseline.json
+git commit -m "chore: bless existing findings baseline"
 ```
 
 **Fail build on HIGH severity secrets:**
@@ -242,20 +292,21 @@ dep-inspector/
 
 ## Roadmap
 
-- [ ] `scan:secrets` — `.git` history scanning (catch keys that were deleted but committed)
-- [ ] `scan:docker` — docker-compose multi-service analysis
-- [ ] `--report` — full HTML report with charts
-- [ ] Slack / Discord webhook alerts
-- [ ] GitHub App integration (PR comments)
-- [ ] Custom rule config via `.depinspectorrc`
+- [ ] `--format sarif` — findings straight into GitHub's Security tab
+- [ ] `scan:supply` — preinstall/postinstall hook audit across node_modules (supply-chain)
+- [ ] `score <package>` — dependency trust score before you `npm install`
+- [ ] SBOM export (CycloneDX)
+- [ ] `scan:repo` — GitHub repo settings audit (branch protection, secret scanning, Dependabot)
+- [ ] `scan:env` — `.env` vs `.env.example` drift detection
+- [ ] `scan:secrets --history` — scan git history for deleted-but-committed keys
 
 ---
 
 ## Contributing
 
 ```bash
-git clone https://github.com/Nevin100/Dep-inspector-nevin
-cd Dep-inspector-nevin
+git clone https://github.com/Nevin100/Dep-inspector-cli
+cd Dep-inspector-cli
 npm install
 npm run build
 ```
